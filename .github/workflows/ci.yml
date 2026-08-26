@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Permite relanzar la verificación a mano desde la pestaña Actions, sin
+  # necesidad de inventar un commit. Útil cuando un run se pierde por una
+  # incidencia del proveedor y no por un cambio en el código.
+  workflow_dispatch:
 
 # En un pull request sólo interesa el último estado propuesto, así que los
 # runs anteriores se agrupan y se cancelan. En main, en cambio, cada commit
