@@ -11,6 +11,7 @@
 # =============================================================================
 
 resource "neon_project" "franchises" {
+  org_id     = var.neon_org_id
   name       = var.project_name
   region_id  = var.region
   pg_version = var.postgres_version
@@ -18,7 +19,10 @@ resource "neon_project" "franchises" {
   # El plan gratuito suspende el cómputo tras un periodo de inactividad y lo
   # reanuda con la siguiente conexión. Es la razón de que la primera petición
   # tras un rato sin uso tarde más de lo normal.
-  history_retention_seconds = 86400
+  #
+  # La ventana de recuperación puntual (point-in-time restore) topa en 6 horas
+  # en el plan gratuito; pedir más hace que la API rechace la creación.
+  history_retention_seconds = var.history_retention_seconds
 }
 
 resource "neon_role" "application" {

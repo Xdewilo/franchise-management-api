@@ -4,6 +4,11 @@ variable "neon_api_key" {
   sensitive   = true
 }
 
+variable "neon_org_id" {
+  description = "Organización de Neon donde se crea el proyecto. Se consulta en la consola, o con: curl -H \"Authorization: Bearer $NEON_API_KEY\" https://console.neon.tech/api/v2/users/me/organizations"
+  type        = string
+}
+
 variable "project_name" {
   description = "Nombre del proyecto en Neon"
   type        = string
@@ -20,6 +25,12 @@ variable "postgres_version" {
   description = "Versión mayor de PostgreSQL"
   type        = number
   default     = 16
+}
+
+variable "history_retention_seconds" {
+  description = "Ventana de recuperación puntual. El plan gratuito admite como máximo 21600 (6 horas)"
+  type        = number
+  default     = 21600
 }
 
 variable "database_name" {

@@ -1,0 +1,40 @@
+# =============================================================================
+# Blueprint de Render
+#
+# Describe el servicio como código en lugar de configurarlo a mano en la
+# consola: quien clone el repositorio obtiene el mismo despliegue sin depender
+# de que alguien recuerde qué casillas marcó.
+#
+# Para usarlo: Render → New → Blueprint → seleccionar este repositorio.
+# =============================================================================
+
+services:
+  - type: web
+    name: franchise-management-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+
+    # Misma región que el proyecto de Neon (aws-us-east-2): colocalizar
+    # cómputo y base evita que cada consulta cruce medio continente.
+    region: ohio
+
+    branch: main
+    autoDeploy: true
+
+    healthCheckPath: /actuator/health/readiness
+
+    envVars:
+      # La conexión se inyecta como secreto desde el panel de Render.
+      # sync: false impide que Render intente leer el valor del repositorio:
+      # las credenciales no se versionan.
+      - key: SPRING_R2DBC_URL
+        sync: false
+      - key: SPRING_R2DBC_USERNAME
+        sync: false
+      - key: SPRING_R2DBC_PASSWORD
+        sync: false
+
+      # Render publica el puerto asignado en PORT; application.yml ya lo lee.
+      - key: PORT
+        value: 8080

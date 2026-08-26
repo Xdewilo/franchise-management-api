@@ -28,9 +28,13 @@ output "password" {
 }
 
 output "r2dbc_url" {
-  description = "URL R2DBC lista para la variable de entorno de la aplicación"
-  value       = "r2dbc:postgresql://${neon_project.franchises.database_host}/${neon_database.franchises.name}"
-  sensitive   = true
+  description = "URL R2DBC lista para la variable de entorno SPRING_R2DBC_URL de la aplicación"
+
+  # sslMode=require no es opcional: Neon rechaza las conexiones sin cifrar.
+  # FlywayConfig traduce ese parámetro al nombre que espera JDBC al derivar
+  # la URL de las migraciones.
+  value     = "r2dbc:postgresql://${neon_project.franchises.database_host}/${neon_database.franchises.name}?sslMode=require"
+  sensitive = true
 }
 
 output "connection_uri" {
