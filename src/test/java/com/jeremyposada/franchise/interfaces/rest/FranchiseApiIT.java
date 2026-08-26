@@ -225,6 +225,20 @@ class FranchiseApiIT extends PostgresTestSupport {
         }
     }
 
+    @Nested
+    @DisplayName("Punto de entrada")
+    class Entrypoint {
+
+        @Test
+        @DisplayName("la raíz redirige a la documentación interactiva")
+        void rootRedirectsToDocumentation() {
+            client.get().uri("/")
+                    .exchange()
+                    .expectStatus().isFound()
+                    .expectHeader().location("/swagger-ui.html");
+        }
+    }
+
     // --- Utilidades ---------------------------------------------------------
 
     private FranchiseResponse createFranchise(String name) {

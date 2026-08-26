@@ -7,11 +7,17 @@ spring:
     url: r2dbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:franchises}
     username: ${POSTGRES_USER:franchise}
     password: ${POSTGRES_PASSWORD:franchise}
+    # El pool está afinado para un PostgreSQL serverless (Neon), que suspende
+    # el cómputo por inactividad y cierra las conexiones ociosas. Sin validar
+    # antes de prestar, el pool entregaría una conexión ya muerta y la
+    # petición fallaría sin motivo aparente.
     pool:
       enabled: true
-      initial-size: 5
-      max-size: 20
-      max-idle-time: 30m
+      initial-size: 2
+      max-size: 10
+      max-idle-time: 5m
+      max-life-time: 30m
+      validation-query: SELECT 1
 
   # Flyway se configura en FlywayConfig, que deriva la URL JDBC de la de
   # R2DBC: un solo lugar donde vive el destino de la conexión.
