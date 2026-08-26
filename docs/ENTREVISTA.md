@@ -95,6 +95,8 @@ Está probado en ambas direcciones: contra PostgreSQL real se verifica que la es
 
 **Si preguntan por pesimista:** un `SELECT FOR UPDATE` retendría la fila y serializaría todo el tráfico de esa franquicia. Con conflictos poco frecuentes, el optimista es más barato: no cuesta nada en el caso normal y sólo trabaja cuando de verdad hay choque.
 
+**Dato concreto que puedes citar:** con 12 peticiones lanzadas *en paralelo* agregando sucursales distintas a la misma franquicia, las 12 respondieron `201` y las 12 quedaron persistidas, con el agregado en versión 12. Sin bloqueo optimista, la mayoría se habría perdido en silencio.
+
 ---
 
 ## 8. «¿Por qué el dominio es inmutable?»
@@ -133,6 +135,22 @@ Por orden de lo que aparecería primero:
 | Multi-tenencia | JWT en el borde y aislamiento por esquema o Row-Level Security |
 
 Lo que hace viable cualquiera de esos cambios es que el dominio no conoce a la infraestructura.
+
+---
+
+## 10.b «¿Qué problema te dio el despliegue?»
+
+Una pregunta muy habitual, y conviene tener una respuesta concreta en vez de "ninguno".
+
+**Tres cosas aparecieron sólo al aplicar la infraestructura de verdad**, ninguna detectable revisando el código:
+
+1. **Neon exige `org_id`** al crear proyectos por API. Lo expuse como variable de Terraform en lugar de fijarlo, para que la definición sirva a cualquier organización.
+2. **La retención de historial topa en 6 horas** en el plan gratuito; pedía 24 y la API rechazaba la creación.
+3. **Neon rechaza conexiones sin cifrar**, y los dos drivers nombran distinto el parámetro: `sslMode` en R2DBC, `sslmode` en JDBC. Como derivo la URL de Flyway de la de R2DBC, la traducción hacía falta o Flyway fallaba al migrar en el arranque.
+
+Y una cuarta, de comportamiento en ejecución: **contra un PostgreSQL serverless el pool entregaba conexiones ya cerradas**. Neon suspende el cómputo por inactividad y cierra las conexiones ociosas; sin validar antes de prestar, la petición fallaba sin que nada en el código estuviera mal. Se resolvió con `validation-query` y acortando la vida ociosa de 30 a 5 minutos.
+
+Es el argumento de por qué la infraestructura como código hay que *aplicarla*, no sólo escribirla: `terraform validate` pasaba en verde con los tres primeros errores dentro.
 
 ---
 
