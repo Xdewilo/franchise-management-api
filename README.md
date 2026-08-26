@@ -442,7 +442,19 @@ terraform apply
 
 ### Aplicación desplegada en Render
 
-La imagen Docker se despliega en [Render](https://render.com) y toma la conexión de variables de entorno; no hay secretos en el repositorio ni en la imagen.
+El servicio está descrito como código en [`render.yaml`](render.yaml), de modo que el despliegue no depende de recordar qué se marcó en una consola web. Se crea desde **Render → New → Blueprint**, apuntando a este repositorio.
+
+Corre en la región **Ohio**, la misma del proyecto de Neon: colocalizar cómputo y base evita que cada consulta cruce medio continente.
+
+La conexión se inyecta como **variables de entorno**, nunca desde el repositorio ni desde la imagen:
+
+| Variable | Origen |
+|---|---|
+| `SPRING_R2DBC_URL` | `terraform output -raw r2dbc_url` |
+| `SPRING_R2DBC_USERNAME` | `terraform output -raw username` |
+| `SPRING_R2DBC_PASSWORD` | `terraform output -raw password` |
+
+Son las propiedades estándar de Spring Boot, así que sobrescriben la configuración por defecto de `application.yml` sin necesidad de un perfil aparte. Flyway deriva de ellas su propia URL JDBC y migra el esquema durante el arranque.
 
 | | |
 |---|---|
