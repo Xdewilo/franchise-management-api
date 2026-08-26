@@ -179,3 +179,285 @@ Conviene tener la respuesta preparada, y que sea honesta:
 | PostgreSQL | 16 |
 
 **Por qué Spring Boot 3.5 y no 4.x:** 3.5 es la línea estable con soporte extendido y el ecosistema alineado (springdoc, Testcontainers). En una prueba con fecha de entrega, elegir la versión que garantiza compatibilidad es parte del criterio.
+
+---
+
+# Anexo — El flujo reactivo, visto por dentro
+
+## A1. Mono y Flux
+
+**La regla:** ¿cuántos valores produce la operación?
+
+```
+Mono<T>  →  0 o 1 valor      (una franquicia, una confirmación)
+Flux<T>  →  0 a N valores    (la lista de productos con más stock)
+```
+
+**La diferencia que importa**, dibujada en el tiempo:
+
+```
+Mono<Franchise>
+    ──────────────────────●──────►
+                      todo junto
+                      al final
+
+Flux<TopStockProduct>
+    ─────●──────●──────●─────────►
+         1      2      3
+      llegan a medida que se producen
+```
+
+`Mono` espera a tenerlo todo y lo entrega de una vez. `Flux` va soltando cada elemento en cuanto está listo, sin esperar a los demás.
+
+**El detalle que marca la diferencia en una entrevista:**
+
+`Mono<List<T>>` y `Flux<T>` generan el mismo JSON —un array— pero no son lo mismo:
+
+```
+Mono<List<T>>   junta los N elementos en memoria  →  emite el paquete completo
+Flux<T>         emite cada elemento según llega   →  nunca hay N en memoria a la vez
+```
+
+`Flux` además soporta *backpressure*: si el cliente consume despacio, el flujo se frena en origen en lugar de acumular elementos.
+
+**Por qué en este proyecto se usan los dos:**
+
+| Endpoint | Tipo | Motivo |
+|---|---|---|
+| Producto con más stock por sucursal | `Flux<TopStockProductResponse>` | Son N filas que salen de la base una a una; se pueden ir emitiendo |
+| Listado paginado de franquicias | `Mono<PageResponse<...>>` | La respuesta incluye el total de páginas, y ese total obliga a tener todo antes de responder. Emitir en streaming no aportaría nada |
+| Resto de operaciones | `Mono<FranchiseResponse>` | Producen exactamente una franquicia |
+
+Elegir `Flux` sólo «porque hay varios» sin pensar en esto es el error habitual.
+
+## A2. Las tres señales de un flujo
+
+Un flujo reactivo sólo emite tres cosas:
+
+```
+onNext(valor)   →  aquí va un valor
+onComplete()    →  se acabó, todo bien
+onError(e)      →  se acabó, algo falló
+```
+
+Y termina **siempre** de una de dos formas, nunca de las dos:
+
+```
+Éxito:   onNext("stock=40")  →  onComplete()
+Error:   onError(ValidationException)          ← sin onNext, sin onComplete
+```
+
+### Por qué `Mono.fromCallable` (con la salida real)
+
+```java
+// SIN fromCallable
+public Mono<Franchise> execute(Long stock) {
+    Stock s = Stock.of(stock);      // si es -1, lanza AQUÍ
+    return mutator.mutate(...);     // nunca se alcanza
+}
+
+// CON fromCallable
+public Mono<Franchise> execute(Long stock) {
+    return Mono.fromCallable(() -> Stock.of(stock))   // siempre devuelve un Mono
+            .flatMap(newStock -> mutator.mutate(...));
+}
+```
+
+Ejecutando ambos con `stock = -1`:
+
+```
+SIN fromCallable
+  ✗ el método NO devolvió nada. Lanzó: ValidationException
+    → nunca existió un Mono; no hay flujo al que aplicar operadores
+
+CON fromCallable
+  ✓ el método SÍ devolvió un Mono
+    señal emitida:  onError(ValidationException: El stock no puede ser negativo...)
+
+  Y como el error viaja DENTRO del flujo, los operadores lo ven:
+    .onErrorReturn("valor por defecto")  →  "valor por defecto"
+```
+
+**La frase para la entrevista:** sin `fromCallable`, el método rompe su propio contrato —promete un `Mono` y lanza una excepción—. Con él, el error viaja como señal y queda al alcance de `retryWhen`, `onErrorMap` o `timeout`. Una excepción lanzada al construir la cadena se salta todos los operadores, porque la cadena ni siquiera llegó a existir.
+
+## A3. Dónde está exactamente lo «no bloqueante»
+
+El modelo tradicional asigna **un hilo por petición**, y ese hilo se queda parado esperando a la base de datos:
+
+```
+BLOQUEANTE  (Spring MVC + JPA)
+
+  Petición 1  ──[hilo 1]──► SQL ····· esperando 40 ms ·····► responde
+  Petición 2  ──[hilo 2]──► SQL ····· esperando 40 ms ·····► responde
+  Petición 3  ──[hilo 3]──► SQL ····· esperando 40 ms ·····► responde
+                    ▲
+                    └─ el hilo está OCUPADO sin hacer nada
+
+  200 peticiones simultáneas  =  200 hilos  (≈1 MB de pila cada uno)
+```
+
+El modelo reactivo libera el hilo mientras la base trabaja:
+
+```
+NO BLOQUEANTE  (WebFlux + R2DBC)
+
+  Petición 1  ──┐
+  Petición 2  ──┤──[event loop]──► SQL ──┐
+  Petición 3  ──┘       ▲                │  el hilo queda LIBRE
+                        │                │  y atiende otras peticiones
+                        └────────────────┘
+                     cuando la BD responde, un hilo retoma el trabajo
+
+  200 peticiones simultáneas  =  un puñado de hilos (uno por núcleo)
+```
+
+**La cadena completa en este proyecto:**
+
+```
+Netty  →  Controller  →  UseCase  →  Mutator  →  R2DBC  →  PostgreSQL
+  └──────────────── todo no bloqueante ─────────────────┘
+```
+
+**El punto crítico:** basta con que **un solo eslabón bloquee** para perder toda la ventaja. Un hilo del event loop bloqueado no atiende a nadie más, y como hay muy pocos, el servidor entero se degrada. Por eso no se puede usar JPA aquí: bloquearía el event loop en cada consulta.
+
+**La única parte bloqueante del sistema es Flyway**, y está aislada a propósito: corre una vez durante el arranque, antes de que el servidor acepte tráfico, y cierra su conexión al terminar. No queda ningún pool JDBC residente.
+
+---
+
+# Anexo — La base de datos, visualmente
+
+## B1. Una tabla, una fila por franquicia
+
+```
+tabla  franchises
+┌──────────┬────────────────────────────────────────────────────────────────┐
+│ id       │ 550e8400-e29b-41d4-a716-446655440000                           │
+│ name     │ "Vive Fresh"                                                    │
+│ version  │ 7                                    ← bloqueo optimista        │
+│ branches │ ┌─────────────────────────────────────────────────┐  ← JSONB   │
+│          │ │ [                                               │            │
+│          │ │   { "id": "aaa…", "name": "Sucursal Norte",     │            │
+│          │ │     "products": [                               │            │
+│          │ │        { "id":"p1", "name":"Arepa", "stock":25 },│           │
+│          │ │        { "id":"p2", "name":"Jugo",  "stock":80 } │           │
+│          │ │     ] },                                        │            │
+│          │ │   { "id": "bbb…", "name": "Sucursal Sur",       │            │
+│          │ │     "products": [                               │            │
+│          │ │        { "id":"p3", "name":"Café",  "stock":10 } │           │
+│          │ │     ] }                                         │            │
+│          │ │ ]                                               │            │
+│          │ └─────────────────────────────────────────────────┘            │
+└──────────┴────────────────────────────────────────────────────────────────┘
+```
+
+**La alternativa normalizada** habría sido:
+
+```
+franchises          branches                    products
+┌────┬──────┐      ┌────┬──────┬───────────┐   ┌────┬──────┬───────┬───────────┐
+│ id │ name │◄─────│ id │ name │franchise_id│◄──│ id │ name │ stock │ branch_id │
+└────┴──────┘      └────┴──────┴───────────┘   └────┴──────┴───────┴───────────┘
+
+Leer una franquicia    →  2 JOINs
+Agregar un producto    →  transacción sobre varias tablas
+```
+
+**Por qué se eligió JSONB:**
+
+| | JSONB embebido | 3 tablas normalizadas |
+|---|---|---|
+| Leer la franquicia completa | 1 fila, sin JOINs | 2 JOINs |
+| Agregar un producto | 1 escritura atómica | transacción multi-tabla |
+| Frontera transaccional | coincide con el agregado | hay que construirla a mano |
+| Coste | reescribe la fila entera | escribe sólo la fila afectada |
+
+El agregado del dominio y la unidad de almacenamiento son **la misma cosa**. Eso es lo que hace que no exista la posibilidad de un estado a medias.
+
+## B2. Cómo se resuelve el criterio 7, paso a paso
+
+Partimos de **una fila** y hay que llegar a **un producto por sucursal**:
+
+```
+①  La fila tal cual está guardada
+    ┌───────────────────────────────────────────────┐
+    │ Vive Fresh │ [ Norte[Arepa 25, Jugo 80],      │
+    │            │   Sur  [Café 10] ]               │
+    └───────────────────────────────────────────────┘
+              │
+              │  CROSS JOIN LATERAL jsonb_array_elements(branches)
+              ▼      ← primer LATERAL: despliega las sucursales
+②  Una fila por sucursal
+    ┌───────┬──────────────────────┐
+    │ Norte │ [Arepa 25, Jugo 80]  │
+    │ Sur   │ [Café 10]            │
+    └───────┴──────────────────────┘
+              │
+              │  CROSS JOIN LATERAL jsonb_array_elements(branch->'products')
+              ▼      ← segundo LATERAL: despliega los productos
+③  Una fila por producto
+    ┌───────┬───────┬───────┐
+    │ Norte │ Arepa │  25   │
+    │ Norte │ Jugo  │  80   │
+    │ Sur   │ Café  │  10   │
+    └───────┴───────┴───────┘
+              │
+              │  ORDER BY sucursal, stock DESC, nombre ASC
+              ▼
+④  Ordenado: dentro de cada sucursal, el mayor stock primero
+    ┌───────┬───────┬───────┐
+    │ Norte │ Jugo  │  80   │  ←── el mayor de Norte
+    │ Norte │ Arepa │  25   │
+    │ Sur   │ Café  │  10   │  ←── el mayor de Sur
+    └───────┴───────┴───────┘
+              │
+              │  DISTINCT ON (sucursal)   ← se queda con la PRIMERA de cada grupo
+              ▼
+⑤  Resultado final
+    ┌───────┬───────┬───────┐
+    │ Norte │ Jugo  │  80   │
+    │ Sur   │ Café  │  10   │
+    └───────┴───────┴───────┘
+```
+
+**La clave que hay que saber explicar:** `DISTINCT ON (columna)` es específico de PostgreSQL y se queda con **la primera fila de cada grupo según el `ORDER BY`**. Por eso el orden no es cosmético: *es* el algoritmo. Cambia el `ORDER BY` y cambia qué producto gana.
+
+El tercer criterio de orden —el nombre— existe para que, si dos productos empatan en stock, la respuesta sea siempre la misma. Sin él, PostgreSQL podría devolver cualquiera de los dos.
+
+**Si preguntan por portabilidad:** el equivalente estándar es una *window function*:
+
+```sql
+ROW_NUMBER() OVER (PARTITION BY sucursal ORDER BY stock DESC)  … WHERE rn = 1
+```
+
+Hace lo mismo, funciona en cualquier motor, y es más verboso. `DISTINCT ON` se eligió por ser más directo, asumiendo PostgreSQL, que es una decisión ya tomada en el proyecto.
+
+## B3. El bloqueo optimista, dibujado
+
+```
+Estado inicial:  version = 5
+
+  Petición A                          Petición B
+  ──────────                          ──────────
+  lee  (version 5)                    lee  (version 5)
+  añade "Arepa"                       añade "Jugo"
+       │                                   │
+       ▼                                   │
+  UPDATE … WHERE version = 5               │
+  ✓ 1 fila afectada → version = 6          │
+                                           ▼
+                                  UPDATE … WHERE version = 5
+                                  ✗ 0 filas: ya no hay ninguna con version 5
+                                           │
+                                           ▼
+                                  FranchiseMutator reintenta:
+                                    relee (version 6)
+                                    añade "Jugo"
+                                    UPDATE … WHERE version = 6
+                                    ✓ version = 7
+
+Resultado: sobreviven LOS DOS productos.
+```
+
+**Sin la columna `version`**, el segundo `UPDATE` habría sobrescrito la fila entera con su copia —que no incluía "Arepa"— y ese producto habría desaparecido **sin ningún error**. Una escritura perdida en silencio, que es el peor tipo de fallo: nadie se entera hasta que falta el dato.
+
+**Verificado en la práctica:** 12 peticiones lanzadas en paralelo sobre la misma franquicia → 12 respuestas `201` y las 12 sucursales persistidas, agregado en versión 12.
