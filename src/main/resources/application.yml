@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: franchise-management-api
+
+  # Conexión reactiva: es la que atiende todo el tráfico del API.
+  r2dbc:
+    url: r2dbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:franchises}
+    username: ${POSTGRES_USER:franchise}
+    password: ${POSTGRES_PASSWORD:franchise}
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 20
+      max-idle-time: 30m
+
+  # Flyway usa JDBC y corre una sola vez durante el arranque.
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:franchises}
+    user: ${POSTGRES_USER:franchise}
+    password: ${POSTGRES_PASSWORD:franchise}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    com.jeremyposada.franchise: ${LOG_LEVEL:INFO}

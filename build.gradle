@@ -1,0 +1,96 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
+}
+
+group = 'com.jeremyposada'
+version = '1.0.0'
+description = 'API reactiva para la gestión de franquicias, sucursales y productos'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('springdocVersion', '2.8.17')
+}
+
+dependencies {
+    // --- Stack reactivo -------------------------------------------------
+    // WebFlux (Netty, no bloqueante) y R2DBC como driver reactivo de
+    // PostgreSQL: la petición nunca retiene un hilo esperando a la BD.
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+    runtimeOnly 'org.postgresql:r2dbc-postgresql'
+
+    // --- Migraciones ----------------------------------------------------
+    // Flyway sólo entiende JDBC. Se ejecuta una vez al arranque contra un
+    // DataSource JDBC dedicado (ver FlywayConfig); el tráfico de la
+    // aplicación sigue siendo 100% reactivo sobre R2DBC.
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // --- Validación y observabilidad ------------------------------------
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // --- Documentación viva del API -------------------------------------
+    implementation "org.springdoc:springdoc-openapi-starter-webflux-ui:${springdocVersion}"
+
+    // --- Utilidades de compilación --------------------------------------
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // --- Testing --------------------------------------------------------
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:r2dbc'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+    finalizedBy jacocoTestReport
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// Los tests de integración levantan PostgreSQL con Testcontainers y por lo
+// tanto exigen un Docker en marcha. `-PskipIntegrationTests` permite correr
+// sólo la suite unitaria (dominio y casos de uso) en entornos sin Docker.
+if (project.hasProperty('skipIntegrationTests')) {
+    tasks.named('test') {
+        exclude '**/*IT.class'
+        exclude '**/*IntegrationTest.class'
+    }
+}

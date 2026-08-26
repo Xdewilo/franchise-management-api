@@ -1,0 +1,29 @@
+# Build
+build/
+bin/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# Secretos — NUNCA versionar credenciales
+.env
+*.tfvars
+!*.tfvars.example
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.*
+infra/tfplan
+
+# SO
+.DS_Store
