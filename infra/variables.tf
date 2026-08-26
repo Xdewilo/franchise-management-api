@@ -11,9 +11,9 @@ variable "project_name" {
 }
 
 variable "region" {
-  description = "Región del proyecto. aws-us-east-1 es la más cercana a Colombia dentro del plan gratuito"
+  description = "Región del proyecto. Debe coincidir con la del servicio en Render: colocalizar cómputo y base evita que cada consulta cruce medio continente"
   type        = string
-  default     = "aws-us-east-1"
+  default     = "aws-us-east-2"
 }
 
 variable "postgres_version" {

@@ -8,5 +8,5 @@ neon_api_key = "napi_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # Opcionales — descomenta para sobrescribir los valores por defecto.
 # project_name  = "franchise-management-api"
-# region        = "aws-us-east-1"
+# region        = "aws-us-east-2"   # misma región que el servicio en Render (Ohio)
 # database_name = "franchises"
