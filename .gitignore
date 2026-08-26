@@ -19,8 +19,9 @@ out/
 !*.tfvars.example
 
 # Terraform
+# El lock file SÍ se versiona: es lo que garantiza que `terraform init`
+# resuelva las mismas versiones de proveedor en cualquier máquina.
 infra/.terraform/
-infra/.terraform.lock.hcl
 infra/*.tfstate
 infra/*.tfstate.*
 infra/tfplan

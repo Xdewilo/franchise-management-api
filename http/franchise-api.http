@@ -1,0 +1,177 @@
+###############################################################################
+# Colección de peticiones del API de franquicias
+#
+# Se ejecuta desde VS Code (extensión REST Client) o IntelliJ IDEA, que
+# entienden este formato de forma nativa.
+#
+# Las peticiones están en orden: cada una usa los identificadores que devolvió
+# la anterior, así que basta ejecutarlas de arriba abajo.
+###############################################################################
+
+@host = http://localhost:8080
+@api = {{host}}/api/v1/franchises
+
+
+### 1. Criterio 2 — Registrar una franquicia
+# @name createFranchise
+POST {{api}}
+Content-Type: application/json
+
+{
+  "name": "Vive Fresh"
+}
+
+@franchiseId = {{createFranchise.response.body.id}}
+
+
+### 2. Criterio 3 — Abrir la primera sucursal
+# @name createNorthBranch
+POST {{api}}/{{franchiseId}}/branches
+Content-Type: application/json
+
+{
+  "name": "Sucursal Norte"
+}
+
+@northBranchId = {{createNorthBranch.response.body.branches.0.id}}
+
+
+### 3. Criterio 3 — Abrir una segunda sucursal
+# @name createSouthBranch
+POST {{api}}/{{franchiseId}}/branches
+Content-Type: application/json
+
+{
+  "name": "Sucursal Sur"
+}
+
+@southBranchId = {{createSouthBranch.response.body.branches.1.id}}
+
+
+### 4. Criterio 4 — Agregar un producto a la sucursal norte
+# @name createProduct
+POST {{api}}/{{franchiseId}}/branches/{{northBranchId}}/products
+Content-Type: application/json
+
+{
+  "name": "Arepa de huevo",
+  "stock": 25
+}
+
+@productId = {{createProduct.response.body.branches.0.products.0.id}}
+
+
+### 5. Criterio 4 — Un segundo producto, con más stock
+POST {{api}}/{{franchiseId}}/branches/{{northBranchId}}/products
+Content-Type: application/json
+
+{
+  "name": "Jugo de mango",
+  "stock": 80
+}
+
+
+### 6. Criterio 4 — Un producto en la sucursal sur
+POST {{api}}/{{franchiseId}}/branches/{{southBranchId}}/products
+Content-Type: application/json
+
+{
+  "name": "Café",
+  "stock": 10
+}
+
+
+### 7. Criterio 6 — Modificar el stock de un producto
+PATCH {{api}}/{{franchiseId}}/branches/{{northBranchId}}/products/{{productId}}/stock
+Content-Type: application/json
+
+{
+  "stock": 40
+}
+
+
+### 8. Criterio 7 — Producto con más stock por sucursal
+# Devuelve un producto por sucursal, indicando a cuál pertenece.
+GET {{api}}/{{franchiseId}}/branches/top-stock-products
+
+
+### 9. Consultar la franquicia completa
+GET {{api}}/{{franchiseId}}
+
+
+### 10. Punto extra — Renombrar la franquicia
+PATCH {{api}}/{{franchiseId}}/name
+Content-Type: application/json
+
+{
+  "name": "Vive Fresh Premium"
+}
+
+
+### 11. Punto extra — Renombrar la sucursal
+PATCH {{api}}/{{franchiseId}}/branches/{{northBranchId}}/name
+Content-Type: application/json
+
+{
+  "name": "Sucursal Centro"
+}
+
+
+### 12. Punto extra — Renombrar el producto
+PATCH {{api}}/{{franchiseId}}/branches/{{northBranchId}}/products/{{productId}}/name
+Content-Type: application/json
+
+{
+  "name": "Arepa de queso"
+}
+
+
+### 13. Criterio 5 — Eliminar un producto de la sucursal
+DELETE {{api}}/{{franchiseId}}/branches/{{northBranchId}}/products/{{productId}}
+
+
+### 14. Listado paginado de franquicias
+GET {{api}}?page=0&size=10
+
+
+###############################################################################
+# Casos de error
+###############################################################################
+
+### 15. 400 — El nombre es obligatorio
+POST {{api}}
+Content-Type: application/json
+
+{
+  "name": "   "
+}
+
+
+### 16. 400 — El stock no puede ser negativo
+PATCH {{api}}/{{franchiseId}}/branches/{{northBranchId}}/products/{{productId}}/stock
+Content-Type: application/json
+
+{
+  "stock": -5
+}
+
+
+### 17. 409 — Nombre de sucursal repetido en la misma franquicia
+POST {{api}}/{{franchiseId}}/branches
+Content-Type: application/json
+
+{
+  "name": "sucursal sur"
+}
+
+
+### 18. 404 — Franquicia inexistente
+GET {{api}}/00000000-0000-0000-0000-000000000000
+
+
+### 19. 400 — Identificador con formato inválido
+GET {{api}}/no-es-un-uuid
+
+
+### 20. Estado del servicio
+GET {{host}}/actuator/health
