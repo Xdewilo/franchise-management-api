@@ -13,14 +13,10 @@ spring:
       max-size: 20
       max-idle-time: 30m
 
-  # Flyway usa JDBC y corre una sola vez durante el arranque.
+  # Flyway se configura en FlywayConfig, que deriva la URL JDBC de la de
+  # R2DBC: un solo lugar donde vive el destino de la conexión.
   flyway:
-    enabled: true
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:franchises}
-    user: ${POSTGRES_USER:franchise}
-    password: ${POSTGRES_PASSWORD:franchise}
-    locations: classpath:db/migration
-    baseline-on-migrate: true
+    enabled: false
 
 server:
   port: ${PORT:8080}
