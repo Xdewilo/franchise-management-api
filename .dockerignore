@@ -1,0 +1,12 @@
+build/
+bin/
+.gradle/
+.git/
+.github/
+.idea/
+docs/
+infra/
+http/
+*.md
+.env
+.DS_Store
