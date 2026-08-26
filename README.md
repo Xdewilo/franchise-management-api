@@ -4,6 +4,9 @@ API reactiva para la gestión de franquicias, sucursales y productos.
 
 Construida con **Java 21**, **Spring Boot 3.5 (WebFlux)**, **PostgreSQL** vía **R2DBC** y arquitectura hexagonal con un modelo de dominio rico.
 
+▶ **Probar el API en línea: https://franchise-management-api-430s.onrender.com** — Swagger UI, sin instalar nada.
+*(La instancia gratuita se suspende por inactividad: la primera petición puede tardar ~50 s en despertar.)*
+
 [![CI](https://github.com/Xdewilo/franchise-management-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Xdewilo/franchise-management-api/actions/workflows/ci.yml)
 
 ---
@@ -97,7 +100,7 @@ El esquema lo crea **Flyway** automáticamente durante el arranque: no hay que e
 | Actualizar el nombre de una sucursal | `PATCH /api/v1/franchises/{franchiseId}/branches/{branchId}/name` | ✅ |
 | Actualizar el nombre de un producto | `PATCH .../products/{productId}/name` | ✅ |
 | Persistencia aprovisionada con IaC | Terraform sobre Neon — ver [`infra/`](infra/) | ✅ |
-| Solución desplegada en la nube | Contenedor en Render — ver [Despliegue](#infraestructura-como-código-y-despliegue) | ✅ |
+| Solución desplegada en la nube | Contenedor en Render, con blueprint declarativo — [probar](https://franchise-management-api-430s.onrender.com) | ✅ |
 
 Adicionalmente, sin que el enunciado lo pidiera: bloqueo optimista para escrituras concurrentes, listado paginado, documentación OpenAPI, respuestas de error normalizadas e integración continua.
 
@@ -458,8 +461,12 @@ Son las propiedades estándar de Spring Boot, así que sobrescriben la configura
 
 | | |
 |---|---|
-| **URL del API** | _(se completa al desplegar)_ |
-| **Swagger UI** | _(se completa al desplegar)_ |
+| **Swagger UI** | **https://franchise-management-api-430s.onrender.com** |
+| **API** | https://franchise-management-api-430s.onrender.com/api/v1/franchises |
+| **OpenAPI (JSON)** | https://franchise-management-api-430s.onrender.com/v3/api-docs |
+| **Health check** | https://franchise-management-api-430s.onrender.com/actuator/health |
+
+La raíz del servicio redirige a Swagger UI, así que se puede probar el API completo desde el navegador sin instalar nada.
 
 > **Nota sobre el nivel gratuito:** tanto Render como Neon suspenden los recursos inactivos. **La primera petición tras un rato sin uso puede tardar ~50 segundos** mientras el contenedor y la base despiertan; las siguientes responden con normalidad. No es un fallo del servicio.
 
