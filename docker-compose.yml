@@ -1,0 +1,47 @@
+# =============================================================================
+# Entorno local completo: base de datos y API.
+#
+# Basta `docker compose up --build` para tener el sistema en marcha; no hace
+# falta ninguna credencial de nube para evaluarlo.
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: franchise-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-franchises}
+      POSTGRES_USER: ${POSTGRES_USER:-franchise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-franchise}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-franchise} -d ${POSTGRES_DB:-franchises}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: franchise-api
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-franchises}
+      POSTGRES_USER: ${POSTGRES_USER:-franchise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-franchise}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      # La API no arranca hasta que PostgreSQL acepta conexiones: Flyway migra
+      # durante el arranque y fallaría contra una base que aún no responde.
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
