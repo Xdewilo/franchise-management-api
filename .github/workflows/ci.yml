@@ -6,12 +6,14 @@ on:
   pull_request:
     branches: [main]
 
-# Sólo se cancelan los runs en curso de un pull request, donde lo que importa
-# es el último estado propuesto. En main cada commit se verifica hasta el
-# final: dejar commits sin verificar deja huecos en el historial y hace que un
-# run cancelado se confunda con uno fallido.
+# En un pull request sólo interesa el último estado propuesto, así que los
+# runs anteriores se agrupan y se cancelan. En main, en cambio, cada commit
+# entra en su propio grupo —de ahí el sha— para que ninguno quede sin
+# verificar: un grupo compartido descarta los runs en cola aunque
+# cancel-in-progress esté desactivado, y un run cancelado se confunde a simple
+# vista con uno fallido.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
