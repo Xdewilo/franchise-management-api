@@ -63,6 +63,11 @@ public class FlywayConfig {
     /**
      * Traduce una URL R2DBC a su equivalente JDBC.
      *
+     * <p>No basta con cambiar el esquema. Los dos drivers nombran distinto el
+     * parámetro de TLS —{@code sslMode} en R2DBC, {@code sslmode} en JDBC— y
+     * un proveedor gestionado como Neon rechaza las conexiones sin cifrar. Sin
+     * esta traducción, la aplicación conectaría pero Flyway fallaría al migrar.
+     *
      * @param url URL de conexión reactiva
      * @return la URL JDBC equivalente
      */
@@ -70,6 +75,7 @@ public class FlywayConfig {
         if (!url.startsWith(R2DBC_SCHEME)) {
             throw new IllegalArgumentException("Se esperaba una URL R2DBC y se recibió: " + url);
         }
-        return JDBC_SCHEME + url.substring(R2DBC_SCHEME.length());
+        return JDBC_SCHEME + url.substring(R2DBC_SCHEME.length())
+                .replace("sslMode=", "sslmode=");
     }
 }
